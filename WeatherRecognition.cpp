@@ -2,7 +2,6 @@
 #include "common.h"
 #include <opencv2/core/utils/logger.hpp>
 #include <string>
-#include <set>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -20,11 +19,11 @@ enum tag
 	RAIN,
 	RAINBOW,
 	RIME,
-	SANDSTONE,
+	SANDSTORM,
 	SNOW
-};
+}tagEnum;
 
-const char* tagName[] =
+const char* tagList[] =
 {
 	"dew",
 	"fogsmog",
@@ -39,13 +38,30 @@ const char* tagName[] =
 	"snow"
 };
 
+map<string, int> tagToInt = {
+	{"dew", DEW},
+	{"fogsmog", FOGSMOG},
+	{"frost", FROST},
+	{"glaze", GLAZE},
+	{"hail", HAIL},
+	{"lightning", LIGHTNING},
+	{"rain", RAIN},
+	{"rainbow", RAINBOW},
+	{"rime", RIME},
+	{"sandstorm", SANDSTORM},
+	{"snow", SNOW}
+};
+
 char folderPath[] = ".\\dataset";
 
-set<string> testSet;
-set<string> trainSet;
-set<string> imgSet;
+vector<string> testSet;
+vector<string> trainSet;
+vector<string> imgSet;
+vector<int> tagTestSet;
+vector<int> tagTrainSet;
 
 int nrImg;
+int nrTag;
 
 void wait() {
 	int c;
@@ -54,17 +70,47 @@ void wait() {
 	getchar();
 }
 
+void createTagSet() {
+
+	nrTag = 0;
+	tagTrainSet.clear();
+	tagTestSet.clear();
+
+	for (const auto& img : trainSet) {
+		stringstream str(img);
+		string tagName, lastWord, word;
+		while (getline(str, word, '\\')) {
+			tagName = lastWord;
+			lastWord = word;
+		}
+		tagTrainSet.push_back(tagToInt[tagName]);
+		nrTag++;
+	}
+	for (const auto& img : testSet) {
+		stringstream str(img);
+		string tagName, lastWord, word;
+		while (getline(str, word, '\\')) {
+			tagName = lastWord;
+			lastWord = word;
+		}
+		tagTestSet.push_back(tagToInt[tagName]);
+		nrTag++;
+	}
+}
+
 void openImages()
 {
 	char file[MAX_PATH];
 	char subfolder[MAX_PATH];
 
 	nrImg = 0;
+	trainSet.clear();
+	testSet.clear();
 
-	for (int i = 0; i < sizeof(tagName) / sizeof(char*); i++) {
+	for (int i = 0; i < sizeof(tagList) / sizeof(char*); i++) {
 		strcpy(subfolder, folderPath);
 		strcat(subfolder, "\\");
-		strcat(subfolder, tagName[i]);
+		strcat(subfolder, tagList[i]);
 
 		imgSet.clear();
 
@@ -72,27 +118,31 @@ void openImages()
 		while (fg.getNextAbsFile(file))
 		{
 			nrImg++;
-			imgSet.insert(file);
+			imgSet.push_back(file);
 		}
+		sort(imgSet.begin(), imgSet.end());
 
-		size_t setSize = imgSet.size();
 		int index = 0;
 		for (const auto& img : imgSet) {
-			if (index++ < setSize / 2)
-				trainSet.insert(img);
+			if (index++ < imgSet.size() / 2)
+				trainSet.push_back(img);
 			else
-				testSet.insert(img);
+				testSet.push_back(img);
 		}
 	}
+	sort(trainSet.begin(), trainSet.end());
+	sort(testSet.begin(), testSet.end());
+
+	createTagSet();
 }
 
 void verifyNbOfImages() {
 	openImages();
-	if (nrImg == 6862) {
-		printf("\nTest verify nb of images successfully\n");
+	if (nrImg == 6862 && nrTag == 6862) {
+		printf("\nTest verify nb of images/tags successfully\n");
 	}
 	else {
-		printf("\nYou made a mistake in counting the files\n");
+		printf("\nYou made a mistake in counting the files\nnrImg = %d; nrTag = %d.", nrImg, nrTag);
 	}
 }
 
@@ -128,6 +178,21 @@ int main()
 		wait();
 
 	} while (op != 0);
+
+	openImages();
+
+	//cout << "Train" << endl;
+	//auto imgName = trainSet.begin();
+	//auto tagName = tagTrainSet.begin();
+	//for (; imgName != trainSet.end(), tagName != tagTrainSet.end(); ++imgName, ++tagName) {
+	//	cout << *imgName << " -> " << *tagName << endl;
+	//}
+	//cout << endl << "Test" << endl;
+	//imgName = testSet.begin();
+	//tagName = tagTestSet.begin();
+	//for (; imgName != testSet.end(), tagName != tagTestSet.end(); ++imgName, ++tagName) {
+	//	cout << *imgName << " -> " << *tagName << endl;
+	//}
 
 	return 0;
 }
