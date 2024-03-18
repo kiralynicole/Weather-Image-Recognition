@@ -3,6 +3,9 @@
 #include <opencv2/core/utils/logger.hpp>
 #include <string>
 #include <set>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 using namespace std;
 
@@ -21,7 +24,7 @@ enum tag
 	SNOW
 };
 
-const char* tagName[] = 
+const char* tagName[] =
 {
 	"dew",
 	"fogsmog",
@@ -62,7 +65,7 @@ void openImages()
 		strcpy(subfolder, folderPath);
 		strcat(subfolder, "\\");
 		strcat(subfolder, tagName[i]);
-		
+
 		imgSet.clear();
 
 		FileGetter fg(subfolder, "jpg");
@@ -75,7 +78,7 @@ void openImages()
 		size_t setSize = imgSet.size();
 		int index = 0;
 		for (const auto& img : imgSet) {
-			if (index++ < setSize/2)
+			if (index++ < setSize / 2)
 				trainSet.insert(img);
 			else
 				testSet.insert(img);
@@ -93,8 +96,16 @@ void verifyNbOfImages() {
 	}
 }
 
-int main() 
+int randomNumber() {
+
+
+	return  rand() % 11;
+}
+
+
+int main()
 {
+	srand(time(NULL));
 	int op;
 	do
 	{
