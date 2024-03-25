@@ -62,6 +62,7 @@ vector<int> tagTrainSet;
 
 int nrImg;
 int nrTag;
+int accMat[11][11];
 
 void wait() {
 	int c;
@@ -167,6 +168,10 @@ void accuracy(vector<int> newTagTestSet) {
 void testAccuracy() {
 	vector<int> newTagTestSet;
 
+	if (tagTestSet.size() == 0) {
+		openImages();
+	}
+
 	for (const auto& img : imgSet) {
 		int newTag = randomTag();
 		newTagTestSet.push_back(newTag);
@@ -174,6 +179,38 @@ void testAccuracy() {
 	accuracy(newTagTestSet);
 }
 
+void printLines(int index) {
+	printf("\n___________|");
+	for (int i = 0; i < 11; i++) {
+		if (i == index) {
+			printf("|______||");
+		}
+		else {
+			printf("________|");
+		}
+	}
+	printf("\n");
+}
+
+void printAccuracyMat() {
+	printf("           |");
+	for (int i = 0; i < 11; i++) {
+		printf("%8.7s|", tagList[i]);
+	}
+	for (int i = 0; i < 11; i++) {
+		printLines(i-1);
+		printf("%10s |", tagList[i]);
+		for (int j = 0; j < 11; j++) {
+			if (i == j) {
+				printf("|%6d||", accMat[i][j]);
+			}
+			else {
+				printf("%7d |", accMat[i][j]);
+			}
+		}
+	}
+	printLines(10);
+}
 
 
 int main()
@@ -204,21 +241,6 @@ int main()
 		wait();
 
 	} while (op != 0);
-
-	openImages();
-
-	//cout << "Train" << endl;
-	//auto imgName = trainSet.begin();
-	//auto tagName = tagTrainSet.begin();
-	//for (; imgName != trainSet.end(), tagName != tagTrainSet.end(); ++imgName, ++tagName) {
-	//	cout << *imgName << " -> " << *tagName << endl;
-	//}
-	//cout << endl << "Test" << endl;
-	//imgName = testSet.begin();
-	//tagName = tagTestSet.begin();
-	//for (; imgName != testSet.end(), tagName != tagTestSet.end(); ++imgName, ++tagName) {
-	//	cout << *imgName << " -> " << *tagName << endl;
-	//}
 
 	return 0;
 }
