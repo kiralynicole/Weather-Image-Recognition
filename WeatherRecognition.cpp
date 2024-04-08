@@ -61,7 +61,7 @@ char folderPath[] = ".\\dataset";
 struct HSVThreshold {
     Scalar meanHSV;
     int count;
-    HSVThreshold(): meanHSV(0,0,0), count(0) {}
+    HSVThreshold() : meanHSV(0, 0, 0), count(0) {}
 };
 
 vector<string> testSet;
