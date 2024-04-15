@@ -8,11 +8,13 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <fstream>
+#include <filesystem>
 
 using namespace std;
 using namespace cv;
 
 const int CLASSES = 11;
+const int PROPERTIES = 6;
 
 enum tag
 {
@@ -61,10 +63,9 @@ map<string, int> tagToInt = {
 char folderPath[] = ".\\dataset";
 
 struct HSVThreshold {
-    Scalar meanHSV;
-    Scalar meanRGB;
+    vector<double> mean;
     int count;
-    HSVThreshold() : meanHSV(0, 0, 0), meanRGB(0, 0, 0), count(0) {}
+    HSVThreshold() : mean(0), count(0) {}
 };
 
 vector<string> testSet;
@@ -89,7 +90,6 @@ void wait() {
 }
 
 void createTagSet() {
-    nrTag = 0;
     tagTrainSet.clear();
     tagTestSet.clear();
 
@@ -101,7 +101,6 @@ void createTagSet() {
             lastWord = word;
         }
         tagTrainSet.push_back(tagToInt[tagName]);
-        nrTag++;
     }
     for (const auto& img : testSet) {
         stringstream str(img);
@@ -111,7 +110,6 @@ void createTagSet() {
             lastWord = word;
         }
         tagTestSet.push_back(tagToInt[tagName]);
-        nrTag++;
     }
 }
 
@@ -151,6 +149,19 @@ void openImages()
     sort(testSet.begin(), testSet.end());
 
     createTagSet();
+}
+
+void saveImage(string img, int actual, int predicted) {
+    stringstream str(img);
+    string tagName, imgName, word;
+    while (getline(str, word, '\\')) {
+        tagName = imgName;
+        imgName = word;
+    }
+    string path = ".\\wrongPredictions\\" + to_string(actual) + "_" + to_string(predicted) + "_" + tagName + "_" + imgName;
+    if (!imwrite(path, imread(img))) {
+        printf("Could not save the img\n");
+    }
 }
 
 void verifyNbOfImages() {
@@ -243,27 +254,6 @@ bool isDew(const string& imagePath) {
     return (greenPercentage > 0.5);
 }
 
-//void predictAndUpdateAccMat() {
-//    if (tagTestSet.empty() || tagTrainSet.empty()) {
-//        openImages();
-//    }
-//    for (size_t i = 0; i < trainSet.size(); ++i) {
-//        string imagePath = trainSet[i];
-//        int actualTag = tagTrainSet[i];
-//
-//        bool isGreen = isDew(imagePath);
-//
-//        int predictedTag;
-//        if (isGreen) {
-//            predictedTag = DEW;
-//        }
-//        else {
-//            predictedTag = randomTag();
-//        }
-//        accMat[predictedTag][actualTag]++;
-//    }
-//}
-
 void calculateMeanHSVMeanRGBForTags() {
     if (thresholdIsEmpty) {
         thresholdIsEmpty = false;
@@ -273,8 +263,10 @@ void calculateMeanHSVMeanRGBForTags() {
         }
 
         for (auto& threshold : classThresholds) {
-            threshold.meanHSV = Scalar(0, 0, 0);
-            threshold.meanRGB = Scalar(0, 0, 0);
+            threshold.mean.clear();
+            for (int i = 0; i < PROPERTIES; i++) {
+                threshold.mean.push_back(0);
+            }
             threshold.count = 0;
         }
 
@@ -292,20 +284,19 @@ void calculateMeanHSVMeanRGBForTags() {
             Scalar meanRGB = mean(image);
 
             int tagIndex = tagTrainSet[i];
-            classThresholds[tagIndex].meanHSV += meanHSV;
-            classThresholds[tagIndex].meanRGB += meanRGB;
+            for (int j = 0; j < 3; j++) {
+                classThresholds[tagIndex].mean.at(j) += meanHSV(j);
+                classThresholds[tagIndex].mean.at(j + 3) += meanRGB(j);
+            }
             classThresholds[tagIndex].count++;
 
         }
 
         for (auto& threshold : classThresholds) {
             if (threshold.count > 0) {
-                threshold.meanHSV[0] /= threshold.count;
-                threshold.meanHSV[1] /= threshold.count;
-                threshold.meanHSV[2] /= threshold.count;
-                threshold.meanRGB[0] /= threshold.count;
-                threshold.meanRGB[1] /= threshold.count;
-                threshold.meanRGB[2] /= threshold.count;
+                for (int i = 0; i < PROPERTIES; i++) {
+                    threshold.mean.at(i) /= threshold.count;
+                }
             }
         }
     }
@@ -314,33 +305,34 @@ void calculateMeanHSVMeanRGBForTags() {
 void printMeanHSVMeanRGBValues() {
     calculateMeanHSVMeanRGBForTags();
     for (int i = 0; i < CLASSES; i++) {
-        printf("____________________________________________________________\n");
-        printf("Mean HSV for %10s: %10f, %10f, %10f\n", 
+        printf("___________________________________________________\n");
+        printf("Mean HSV for %10s: %7.2f, %7.2f, %7.2f\n", 
             tagList[i],
-            classThresholds[i].meanHSV[0],
-            classThresholds[i].meanHSV[1],
-            classThresholds[i].meanHSV[2]);
-        printf("Mean RGB for %10s: %10f, %10f, %10f\n",
+            classThresholds[i].mean.at(0),
+            classThresholds[i].mean.at(1),
+            classThresholds[i].mean.at(2));
+        printf("Mean RGB for %10s: %7.2f, %7.2f, %7.2f\n",
             tagList[i],
-            classThresholds[i].meanRGB[0],
-            classThresholds[i].meanRGB[1],
-            classThresholds[i].meanRGB[2]);
+            classThresholds[i].mean.at(3),
+            classThresholds[i].mean.at(4),
+            classThresholds[i].mean.at(5));
     }
 }
 
-double euclideanDistance(const Scalar& s1, const Scalar& s2) {
-    double dx = s1[0] - s2[0];
-    double dy = s1[1] - s2[1];
-    double dz = s1[2] - s2[2];
-
-    return std::sqrt(dx * dx + dy * dy + dz * dz);
+double euclideanDistance(const vector<double>& v1, const vector<double>& v2) {
+    double sum = 0;
+    for (int i = 0; i < PROPERTIES; i++) {
+        double dif = v1.at(i) - v2.at(i);
+        sum += dif * dif;
+    }
+    return std::sqrt(sum);
 }
 
-int closestHSVandRGB(const Scalar& hsvImage, const Scalar& rgbImage) {
+int closestHSVandRGB(const vector<double>& imageProp) {
     int index = 0;
-    double minDist = euclideanDistance(hsvImage, classThresholds[0].meanHSV) + euclideanDistance(rgbImage, classThresholds[0].meanRGB);
+    double minDist = euclideanDistance(imageProp, classThresholds[0].mean);
     for (int i = 1; i < CLASSES; i++) {
-        double nextDist = euclideanDistance(hsvImage, classThresholds[i].meanHSV) + euclideanDistance(rgbImage, classThresholds[i].meanRGB);
+        double nextDist = euclideanDistance(imageProp, classThresholds[i].mean);
         if (nextDist < minDist) {
             minDist = nextDist;
             index = i;
@@ -354,17 +346,12 @@ void predictAndUpdateAccMat() {
         openImages();
     }
 
-    ofstream file("wrongPrediction.txt");
-    if (!file.is_open()) {
-        printf("Could not open the file!\n");
-    }
-
     for (size_t i = 0; i < testSet.size(); ++i) {
         int actualTag = tagTestSet[i];
         string img = testSet[i];
         Mat image = imread(img);
         if (image.empty()) {
-            printf("Could not read the img!\n");
+            printf("Could not read the img\n");
             continue;
         }
 
@@ -372,17 +359,23 @@ void predictAndUpdateAccMat() {
         cvtColor(image, hsvImage, COLOR_BGR2HSV);
         Scalar meanHSV = mean(hsvImage);
         Scalar meanRGB = mean(image);
+        
+        vector<double> mean;
+        for (int j = 0; j < 3; j++) {
+            mean.push_back(meanHSV[j]);
+        }
+        for (int j = 0; j < 3; j++) {
+            mean.push_back(meanRGB[j]);
+        }
 
-        int predictedTag = closestHSVandRGB(meanHSV, meanRGB);
+        int predictedTag = closestHSVandRGB(mean);
 
         accMat[predictedTag][actualTag]++;
 
-        if (predictedTag != actualTag && file.is_open()) {
-            file << actualTag << " -> " << predictedTag << " -> " << img << endl;
+        if (actualTag != predictedTag) {
+            saveImage(img, actualTag, predictedTag);
         }
     }
-
-    file.close();
 }
 
 void testAccuracy() {
@@ -406,7 +399,15 @@ void testAccuracy() {
             Scalar meanHSV = mean(hsvImage);
             Scalar meanRGB = mean(image);
 
-            predictedTag = closestHSVandRGB(meanHSV, meanRGB);
+            vector<double> mean;
+            for (int j = 0; j < 3; j++) {
+                mean.push_back(meanHSV[j]);
+            }
+            for (int j = 0; j < 3; j++) {
+                mean.push_back(meanRGB[j]);
+            }
+
+            predictedTag = closestHSVandRGB(mean);
         }
 
         newTagTestSet.push_back(predictedTag);
