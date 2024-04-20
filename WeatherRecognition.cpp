@@ -151,18 +151,24 @@ void openImages()
     createTagSet();
 }
 
-void saveImage(string img, int actual, int predicted) {
-    stringstream str(img);
-    string tagName, imgName, word;
-    while (getline(str, word, '\\')) {
-        tagName = imgName;
-        imgName = word;
+void saveImage(const string& img, int actual, int predicted) {
+    Mat image = imread(img);
+    if (image.empty()) {
+        printf("Could not read the image: %s\n", img.c_str());
+        return;
     }
-    string path = ".\\wrongPredictions\\" + to_string(actual) + "_" + to_string(predicted) + "_" + tagName + "_" + imgName;
-    if (!imwrite(path, imread(img))) {
-        printf("Could not save the img\n");
+
+    string imgName = img.substr(img.find_last_of("\\/") + 1); // Extract filename from path
+    string folderPath = ".\\wrongPredictions";
+    string path = folderPath + "\\" + to_string(actual) + "_" + to_string(predicted) + "_" + imgName;
+
+    // Save the image
+    if (!imwrite(path, image)) {
+        printf("Could not save the image at path: %s\n", path.c_str());
     }
 }
+
+
 
 void verifyNbOfImages() {
     openImages();
