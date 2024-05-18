@@ -10,11 +10,15 @@
 #include <fstream>
 #include <filesystem>
 
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+
 using namespace std;
 using namespace cv;
 
 const int CLASSES = 11;
-const int PROPERTIES = 6;
+const int PROPERTIES = 262;
+const int RADIUS = 108;
 
 enum tag
 {
@@ -151,18 +155,24 @@ void openImages()
     createTagSet();
 }
 
-void saveImage(string img, int actual, int predicted) {
-    stringstream str(img);
-    string tagName, imgName, word;
-    while (getline(str, word, '\\')) {
-        tagName = imgName;
-        imgName = word;
+void saveImage(const string& img, int actual, int predicted) {
+    Mat image = imread(img);
+    if (image.empty()) {
+        printf("Could not read the image: %s\n", img.c_str());
+        return;
     }
-    string path = ".\\wrongPredictions\\" + to_string(actual) + "_" + to_string(predicted) + "_" + tagName + "_" + imgName;
-    if (!imwrite(path, imread(img))) {
-        printf("Could not save the img\n");
+
+    string imgName = img.substr(img.find_last_of("\\/") + 1); // Extract filename from path
+    string folderPath = ".\\wrongPredictions";
+    string path = folderPath + "\\" + to_string(actual) + "" + to_string(predicted) + "" + imgName;
+
+    // Save the image
+    if (!imwrite(path, image)) {
+        printf("Could not save the image at path: %s\n", path.c_str());
     }
 }
+
+
 
 void verifyNbOfImages() {
     openImages();
@@ -254,6 +264,80 @@ bool isDew(const string& imagePath) {
     return (greenPercentage > 0.5);
 }
 
+vector<double> convertToFrequencyAndCountGrays(const string& imagePath, int radius) {
+    Mat image = imread(imagePath, IMREAD_GRAYSCALE);
+    if (image.empty()) {
+        cerr << "Failed to load image: " << imagePath << std::endl;
+        return {};
+    }
+
+    // Din cate tin minte de la profu, imaginea trebuie sa fie rescalata, asa ca inainte sa convertim imaginea trebuie sa ii dam un resize
+    // pentru ca altfel poate sa aiba un comportament ciudat sau sa nu mearga pur si simplu, idk :) 
+    Mat padded;
+    int m = getOptimalDFTSize(image.rows);
+    int n = getOptimalDFTSize(image.cols);
+    copyMakeBorder(image, padded, 0, m - image.rows, 0, n - image.cols, BORDER_CONSTANT, Scalar::all(0));
+
+    Mat planes[] = { Mat_<float>(padded), Mat::zeros(padded.size(), CV_32F) };
+    Mat complexI;
+    merge(planes, 2, complexI);
+
+    // dft
+    dft(complexI, complexI);
+
+    split(complexI, planes); // planes[0] = Re(DFT(I)), planes[1] = Im(DFT(I))
+    magnitude(planes[0], planes[1], planes[0]);
+    Mat magI = planes[0];
+
+    magI += Scalar::all(1);
+    log(magI, magI);
+
+    magI = magI(Rect(0, 0, magI.cols & -2, magI.rows & -2));
+
+    // originea trebuie sa fie la centrul imaginii, aici o rearanjam sa sa corespunda 
+    int cx = magI.cols / 2;
+    int cy = magI.rows / 2;
+
+    Mat q0(magI, Rect(0, 0, cx, cy));
+    Mat q1(magI, Rect(cx, 0, cx, cy));
+    Mat q2(magI, Rect(0, cy, cx, cy));
+    Mat q3(magI, Rect(cx, cy, cx, cy));
+
+    Mat tmp;
+    q0.copyTo(tmp);
+    q3.copyTo(q0);
+    tmp.copyTo(q3);
+
+    q1.copyTo(tmp);
+    q2.copyTo(q1);
+    tmp.copyTo(q2);
+
+    normalize(magI, magI, 0, 1, NORM_MINMAX);
+
+    // Aici am creat cercul, raza o dai in antetul functiei, depinde cat de mare vrem noi sa fie
+    Mat circleMask = Mat::zeros(magI.size(), CV_8U);
+    Point center = Point(cx, cy);
+    circle(circleMask, center, radius, Scalar(255), 1);
+
+    Mat circlePixels;
+    magI.convertTo(magI, CV_8U, 255.0);
+    bitwise_and(magI, circleMask, circlePixels);
+
+    // Aici se numara nuantele de gri de pe cerc
+    vector<double> grayShades(256, 0);
+    for (int y = 0; y < circlePixels.rows; ++y) {
+        for (int x = 0; x < circlePixels.cols; ++x) {
+            if (circleMask.at<uchar>(y, x) > 0) {
+                int grayValue = circlePixels.at<uchar>(y, x);
+                grayShades[grayValue]++;
+            }
+        }
+    }
+
+    return grayShades;
+}
+
+
 void calculateMeanHSVMeanRGBForTags() {
     if (thresholdIsEmpty) {
         thresholdIsEmpty = false;
@@ -271,10 +355,18 @@ void calculateMeanHSVMeanRGBForTags() {
         }
 
         for (size_t i = 0; i < trainSet.size(); i++) {
-            Mat image = imread(trainSet[i]);
+            string img = trainSet[i];
+            Mat image = imread(img);
             if (image.empty()) {
                 printf("Could not read the img\n");
                 continue;
+            }
+
+            vector<double> frequency = convertToFrequencyAndCountGrays(img, RADIUS);
+            int tagIndex = tagTrainSet[i];
+
+            for (int j = 0; j < 256; j++) {
+                classThresholds[tagIndex].mean.at(j) += frequency.at(j);
             }
 
             Mat hsvImage;
@@ -283,12 +375,12 @@ void calculateMeanHSVMeanRGBForTags() {
             Scalar meanHSV = mean(hsvImage);
             Scalar meanRGB = mean(image);
 
-            int tagIndex = tagTrainSet[i];
             for (int j = 0; j < 3; j++) {
-                classThresholds[tagIndex].mean.at(j) += meanHSV(j);
-                classThresholds[tagIndex].mean.at(j + 3) += meanRGB(j);
+                classThresholds[tagIndex].mean.at(j + 256) += meanHSV(j);
+                classThresholds[tagIndex].mean.at(j + 259) += meanRGB(j);
             }
             classThresholds[tagIndex].count++;
+
 
         }
 
@@ -305,8 +397,8 @@ void calculateMeanHSVMeanRGBForTags() {
 void printMeanHSVMeanRGBValues() {
     calculateMeanHSVMeanRGBForTags();
     for (int i = 0; i < CLASSES; i++) {
-        printf("___________________________________________________\n");
-        printf("Mean HSV for %10s: %7.2f, %7.2f, %7.2f\n", 
+        printf("_________________\n");
+        printf("Mean HSV for %10s: %7.2f, %7.2f, %7.2f\n",
             tagList[i],
             classThresholds[i].mean.at(0),
             classThresholds[i].mean.at(1),
@@ -359,8 +451,8 @@ void predictAndUpdateAccMat() {
         cvtColor(image, hsvImage, COLOR_BGR2HSV);
         Scalar meanHSV = mean(hsvImage);
         Scalar meanRGB = mean(image);
-        
-        vector<double> mean;
+
+        vector<double> mean = convertToFrequencyAndCountGrays(img, RADIUS);
         for (int j = 0; j < 3; j++) {
             mean.push_back(meanHSV[j]);
         }
@@ -399,7 +491,7 @@ void testAccuracy() {
             Scalar meanHSV = mean(hsvImage);
             Scalar meanRGB = mean(image);
 
-            vector<double> mean;
+            vector<double> mean = convertToFrequencyAndCountGrays(img, RADIUS);
             for (int j = 0; j < 3; j++) {
                 mean.push_back(meanHSV[j]);
             }
@@ -435,6 +527,7 @@ int main()
         printf(" 3 - Calculate accuracy\n");
         printf(" 4 - Calculate accuracy per class\n");
         printf(" 5 - Calculate thresholds per class\n");
+        printf(" 6 - Convert image to frequency space and count gray shades\n");
         printf("Option: ");
         scanf("%d", &op);
 
@@ -454,6 +547,20 @@ int main()
             break;
         case 5:
             printMeanHSVMeanRGBValues();
+            break;
+        case 6: {
+            string imagePath = ".\\dataset\\dew\\2208.jpg";
+            int radius;
+            cout << "Enter radius: ";
+            cin >> radius;
+            vector<double> grayShades = convertToFrequencyAndCountGrays(imagePath, radius);
+            for (size_t i = 0; i < grayShades.size(); ++i) {
+                if (grayShades[i] > 0) {
+                    printf("Gray shade %zu: %f pixels\n", i, grayShades[i]);
+                }
+            }
+            break;
+        }
         }
         wait();
 
