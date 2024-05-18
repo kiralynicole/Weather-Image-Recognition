@@ -164,7 +164,7 @@ void saveImage(const string& img, int actual, int predicted) {
 
     string imgName = img.substr(img.find_last_of("\\/") + 1); // Extract filename from path
     string folderPath = ".\\wrongPredictions";
-    string path = folderPath + "\\" + to_string(actual) + "" + to_string(predicted) + "" + imgName;
+    string path = folderPath + "\\" + to_string(actual) + "_" + to_string(predicted) + "_" + imgName;
 
     // Save the image
     if (!imwrite(path, image)) {
