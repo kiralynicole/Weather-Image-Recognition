@@ -56,6 +56,15 @@ Radius = 150:
 After some tests our conclusion is that the best accuracy is when we set the radius to 108.
 
 
+### Some images before and after converting to frequency domain:
+
+![image](images/0605.jpg) ![image](images/0605_frequency.jpg)
+
+
+![image](images/2798.jpg) ![image](images/2798_frequency.jpg)
+
+
+
 
 ### Final result
  ![image](images/all.jpeg)
