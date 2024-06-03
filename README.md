@@ -64,6 +64,10 @@ After some tests our conclusion is that the best accuracy is when we set the rad
 ![image](images/2798.jpg) ![image](images/2798_frequency.jpg)
 
 
+### These images were predicted correct after converting them to frequency domain
+
+![image](images/right_pred.jpeg) ![image](images/right_pred2.jpeg)  
+
 
 
 ### Final result
